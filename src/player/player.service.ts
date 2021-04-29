@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CreatePlayerDto } from './dtos/create-player.dto';
 import { Player } from './interfaces/player.interface';
-import { v4 as uuidv4 } from 'uuid';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 
 
 @Injectable()
@@ -16,20 +17,24 @@ export class PlayerService {
     private readonly logger = new Logger(PlayerService.name);
 
     /**
+     * @param playerModel 
+     */
+    constructor(@InjectModel('Player') private readonly playerModel: Model<Player>){}
+
+    /**
      * @param playerObject 
      */
     async createOrUpdatePlayer(playerObject: CreatePlayerDto): Promise<string> {
         this.logger.log(`Received CreatePlayerObject: ${JSON.stringify(playerObject)}`)
 
         const { email } = playerObject
-
-        const playerExists = await this.players.find(player => player.email === email)
+        const playerExists = await this.playerModel.findOne({email}).exec()
 
         if (!playerExists) {
-            return this.createPlayer(playerObject);
+            return await this.createPlayer(playerObject)
         }
 
-        return this.updatePlayer(playerExists, playerObject)
+        return await this.updatePlayer(playerObject)
     }
 
     /**
@@ -38,21 +43,21 @@ export class PlayerService {
     async getPlayer(email = null, id = null): Promise<Player[]>{
 
         if (email) {
-            return this.getPlayerByEmail(email);
+            return this.getPlayerByEmail(email)
         }
 
         if (id) {
-            return this.getPlayerById(id);
+            return this.getPlayerById(id)
         }
 
-        return this.getAllPlayers();        
+        return this.getAllPlayers()   
     }
 
     /**
      * @returns Players[]
      */
     async getAllPlayers(): Promise<Player[]>{
-        return await this.players; 
+        return await this.playerModel.find().exec()
     }
 
     /**
@@ -61,9 +66,9 @@ export class PlayerService {
      */
     async getPlayerByEmail(email): Promise<Player[]>{
 
-        var playerExists = this.players.find(player => player.email === email)
+        var playerExists = await this.playerModel.find({email}).exec()
 
-        return [playerExists];
+        return playerExists;
     }
 
     /**
@@ -72,9 +77,9 @@ export class PlayerService {
      */
     async getPlayerById(id): Promise<Player[]>{
 
-        var playerExists = this.players.find(player => player._id === id)
+        var playerExists = await this.playerModel.find({id}).exec()
 
-        return [playerExists];
+        return playerExists;
     }
 
     /**
@@ -86,50 +91,31 @@ export class PlayerService {
     async deletePlayer(email = null, id = null): Promise<boolean>{
 
         if (email) {
-            var playerExists = this.players.find(player => player.email === email)
+            var playerExists = await this.getPlayerByEmail(email)
         }
 
-        if (id) {
-            var playerExists = this.players.find(player => player._id === id)
+        if (!playerExists.length && id) {
+            var playerExists = await this.getPlayerById(id)
         }
-
-        if (!playerExists) {
+        
+        if (!playerExists.length) {
             return false;
         }
 
-        await this.deleteExistsPlayer(playerExists);
+        await this.playerModel.deleteOne().exec();
         
         return true;
     }
 
     /**
-     * @param playerExists 
-     */
-    private async deleteExistsPlayer(playerExists: Player): Promise<void> {
-        this.players = this.players.filter(player => player._id !== playerExists._id)
-    }
-
-    /**
      * @param createPlayerObject 
      */
-    private createPlayer(createPlayerObject: CreatePlayerDto): string {
-        const { name, phoneNumber, email } = createPlayerObject;
-        var playerId = uuidv4();
-        const player: Player = {
-            _id: playerId,
-            name,
-            phoneNumber,
-            email,
-            ranking: 'A',
-            rankingPosition: 1,
-            picture: 'www.google.com/picture.jpg'
-        }
+    private async createPlayer(createPlayerObject: CreatePlayerDto): Promise<string> {
+        
+        const playerCreated = new this.playerModel(createPlayerObject)
+        const player = await playerCreated.save()
 
-        this.logger.log(`Player Object will be saved: ${JSON.stringify(player)}`)
-
-        this.players.push(player);
-
-        return playerId;
+        return player.id
     }
 
     /**
@@ -138,12 +124,12 @@ export class PlayerService {
      * @param playerObject 
      * @returns string
      */
-    private updatePlayer(playerExists: Player, playerObject: CreatePlayerDto): string {
-        const { name, phoneNumber } = playerObject;
+    private async updatePlayer(playerObject: CreatePlayerDto): Promise<string> {       
+        const player = await this.playerModel.findOneAndUpdate(
+            { email: playerObject.email }, 
+            { $set: playerObject }
+        ).exec()
 
-        playerExists.name = name;
-        playerExists.phoneNumber = phoneNumber;
-        
-        return playerExists._id
+        return player.id
     }
 }
