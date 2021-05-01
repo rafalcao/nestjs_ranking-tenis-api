@@ -89,20 +89,26 @@ export class PlayerService {
      * @returns boolean
      */
     async deletePlayer(email = null, id = null): Promise<boolean>{
-
-        if (email) {
-            var playerExists = await this.getPlayerByEmail(email)
-        }
-
-        if (!playerExists.length && id) {
-            var playerExists = await this.getPlayerById(id)
-        }
         
-        if (!playerExists.length) {
-            return false;
-        }
+        try {
+            let playerExists = null;
 
-        await this.playerModel.deleteOne().exec();
+            if (email) {
+                playerExists = await this.getPlayerByEmail(email)
+            }
+
+            if (!playerExists.length && id) {
+                playerExists = await this.getPlayerById(id)
+            }
+            
+            if (!playerExists.length) {
+                return false;
+            }
+
+            await this.playerModel.deleteOne().exec();
+        } catch (error) {
+            return false
+        }
         
         return true;
     }
